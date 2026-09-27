@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>بازی شکار الماس و بمب</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: radial-gradient(circle at center, #1b263b 0%, #0d1b2a 100%);
+      font-family: Tahoma, 'Vazirmatn', sans-serif;
+      overflow: hidden;
+      color: #ffffff;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      height: 100vh;
+      max-height: 850px;
+      background: linear-gradient(180deg, #0b132b 0%, #1c2541 100%);
+      border: 2px solid #3a506b;
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.2);
+      overflow: hidden;
+    }
+    #gameCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    /* هدر بالای صفحه */
+    #top-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 19, 43, 0.75);
+      backdrop-filter: blur(8px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 10;
+    }
+    .stat-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .stat-diamond { color: #00f0ff; text-shadow: 0 0 8px rgba(0, 240, 255, 0.6); }
+    .stat-bombs { color: #ff3366; font-size: 18px; }
+
+    /* لایه پنجره‌ها (منو، باخت، تبلیغ) */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 15, 30, 0.88);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+      padding: 24px;
+      text-align: center;
+      backdrop-filter: blur(6px);
+    }
+    .hidden { display: none !important; }
+
+    h1 { font-size: 26px; margin-bottom: 12px; color: #00f0ff; }
+    h2 { font-size: 22px; margin-bottom: 15px; color: #ff3366; }
+    p { font-size: 14px; line-height: 1.8; color: #cbd5e1; margin-bottom: 20px; }
+
+    .btn {
+      background: linear-gradient(135deg, #00c6ff, #0072ff);
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 198, 255, 0.4);
+      margin: 6px;
+      width: 80%;
+      max-width: 260px;
+      transition: transform 0.1s, filter 0.2s;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-ad {
+      background: linear-gradient(135deg, #f7971e, #ffd200);
+      color: #222;
+      box-shadow: 0 4px 15px rgba(255, 210, 0, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: none;
+    }
+    #ad-timer {
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffd200;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <!-- نوار وضعیت -->
+    <div id="top-bar">
+      <div class="stat-box stat-diamond">
+        <span>💎</span>
+        <span id="diamond-count">۰</span>
+      </div>
+      <div class="stat-box">
+        <span style="font-size: 13px; color: #aaa;">موج:</span>
+        <span id="wave-count" style="color: #fff;">۱</span>
+      </div>
+      <div class="stat-box stat-bombs">
+        <span id="bomb-icons">💣 💣 💣</span>
+      </div>
+    </div>
+
+    <!-- محیط نقاشی بازی -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- منوی شروع بازی -->
+    <div id="start-menu" class="overlay">
+      <h1>💎 شکار الماس و بمب 💣</h1>
+      <p>الماس‌ها از پایین پرتاب می‌شوند؛ تا قبل از افتادن لمسشان کن!<br>مواظب بمب‌ها باش؛ با زدن ۳ بمب می‌سوزی!</p>
+      <button class="btn" id="start-btn">شروع بازی</button>
+    </div>
+
+    <!-- پنجره باخت (Game Over) -->
+    <div id="gameover-menu" class="overlay hidden">
+      <h2>💥 باختی! (۳ بمب زدی)</h2>
+      <p>مجموع الماس‌های ذخیره‌شده: <b id="final-diamonds" style="color:#00f0ff;">۰</b></p>
+      <button class="btn btn-ad" id="watch-ad-btn">📺 دیدن تبلیغ (+۱۰ الماس و ادامه)</button>
+      <button class="btn btn-secondary" id="restart-btn">🔄 شروع مجدد</button>
+    </div>
+
+    <!-- پنجره شبیه‌ساز تبلیغ -->
+    <div id="ad-screen" class="overlay hidden">
+      <h2>در حال پخش تبلیغ...</h2>
+      <p>لطفاً تا پایان صبر کنید تا پاداش را دریافت کنید.</p>
+      <div id="ad-timer">۵</div>
+    </div>
+  </div>
+
+  <script>
+    // --- سیستم صدا با وب‌آدیو (بدون نیاز به دانلود فایل) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'diamond') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+      } else if (type === 'bomb') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.35);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+      }
+    }
+
+    // --- وضعیت بازی ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    let diamonds = parseInt(localStorage.getItem('saved_diamonds') || '0', 10);
+    let bombHits = 0; // حداکثر ۳ تا
+    let wave = 1;
+    let isPlaying = false;
+    let items = [];
+    let particles = [];
+    let waveTimer = 0;
+    const WAVE_INTERVAL = 3.0; // هر ۳ ثانیه یک موج
+
+    // تنظیم اندازه بوم
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      width = canvas.width = rect.width;
+      height = canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // به‌روزرسانی نوار بالا
+    function updateUI() {
+      document.getElementById('diamond-count').innerText = diamonds.toLocaleString('fa-IR');
+      document.getElementById('wave-count').innerText = wave.toLocaleString('fa-IR');
+      
+      // نمایش بمب‌ها
+      let icons = '';
+      for (let i = 0; i < 3; i++) {
+        icons += (i < bombHits) ? '💥 ' : '💣 ';
+      }
+      document.getElementById('bomb-icons').innerText = icons;
+    }
+
+    // کلاس آیتم‌ها (الماس یا بمب) با فیزیک پرتاب، مکث در اوج و افتادن
+    class FallingItem {
+      constructor(type) {
+        this.type = type; // 'diamond' یا 'bomb'
+        this.radius = 26;
+        this.x = Math.random() * (width - 80) + 40;
+        this.y = height + 30;
+        this.targetY = height * (0.2 + Math.random() * 0.35); // نقطه اوج پرتاب
+        
+        this.state = 'rising'; // rising -> pausing -> falling
+        this.vy = -(12 + Math.random() * 4); // سرعت بالا رفتن
+        this.pauseTimer = 0;
+        this.pauseDuration = 0.5 + Math.random() * 0.4; // مکث حدود نیم ثانیه در اوج
+        this.alpha = 1;
+        this.isDead = false;
+      }
+
+      update(dt) {
+        if (this.state === 'rising') {
+          this.y += this.vy;
+          this.vy += 9.8 * dt * 1.8; // نیروی جاذبه کندکننده در بالا رفتن
+          if (this.y <= this.targetY || this.vy >= 0) {
+            this.state = 'pausing';
+            this.pauseTimer = this.pauseDuration;
+          }
+        } else if (this.state === 'pausing') {
+          this.pauseTimer -= dt;
+          if (this.pauseTimer <= 0) {
+            this.state = 'falling';
+            this.vy = 1;
+          }
+        } else if (this.state === 'falling') {
+          this.vy += 9.8 * dt * 3.2; // شتاب گرفتن هنگام افتادن
+          this.y += this.vy;
+        }
+
+        if (this.y > height + 50) {
+          this.isDead = true;
+        }
+      }
+
+      draw(c) {
+        c.save();
+        c.translate(this.x, this.y);
+        c.font = '34px sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        
+        if (this.type === 'diamond') {
+          c.shadowColor = '#00f0ff';
+          c.shadowBlur = 15;
+          c.fillText('💎', 0, 0);
+        } else {
+          c.shadowColor = '#ff3366';
+          c.shadowBlur = 15;
+          c.fillText('💣', 0, 0);
+        }
+        c.restore();
+      }
+    }
+
+    // افکت ذرات برای کلیک روی الماس یا انفجار بمب
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.vx = (Math.random() - 0.5) * 8;
+        this.vy = (Math.random() - 0.5) * 8;
+        this.life = 1.0;
+      }
+      update(dt) {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= dt * 2;
+      }
+      draw(c) {
+        if (this.life <= 0) return;
+        c.save();
+        c.globalAlpha = Math.max(0, this.life);
+        c.fillStyle = this.color;
+        c.beginPath();
+        c.arc(this.x, this.y, 4, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    // شروع موج جدید طبق سناریو
+    function spawnWave() {
+      const count = Math.random() > 0.5 ? 5 : 4; // ۴ یا ۵ الماس
+      const hasBombs = (wave % 4 === 0); // موج چهارم و مضارب ۴ بمب دارد
+      const bombCount = hasBombs ? (Math.random() > 0.5 ? 2 : 1) : 0;
+
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          if (isPlaying) items.push(new FallingItem('diamond'));
+        }, i * 140);
+      }
+
+      for (let b = 0; b < bombCount; b++) {
+        setTimeout(() => {
+          if (isPlaying) items.push(new FallingItem('bomb'));
+        }, (b + 1) * 220);
+      }
+    }
+
+    // بررسی کلیک یا لمس
+    function handleTap(clientX, clientY) {
+      if (!isPlaying) return;
+      const rect = canvas.getBoundingClientRect();
+      const clickX = clientX - rect.left;
+      const clickY = clientY - rect.top;
+
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        const dist = Math.hypot(item.x - clickX, item.y - clickY);
+        if (dist < item.radius + 15) { // شعاع لمس راحت
+          if (item.type === 'diamond') {
+            diamonds += 1;
+            playSound('diamond');
+            for (let p = 0; p < 8; p++) particles.push(new Particle(item.x, item.y, '#00f0ff'));
+          } else {
+            // برخورد با بمب
+            bombHits += 1;
+            diamonds = Math.max(0, diamonds - 5); // ۵ الماس کم می‌شود
+            playSound('bomb');
+            for (let p = 0; p < 15; p++) particles.push(new Particle(item.x, item.y, '#ff3366'));
+
+            if (bombHits >= 3) {
+              gameOver();
+            }
+          }
+          localStorage.setItem('saved_diamonds', diamonds);
+          updateUI();
+          items.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      handleTap(e.clientX, e.clientY);
+    });
+
+    // باخت و توقف بازی
+    function gameOver() {
+      isPlaying = false;
+      document.getElementById('final-diamonds').innerText = diamonds.toLocaleString('fa-IR');
+      document.getElementById('gameover-menu').classList.remove('hidden');
+    }
+
+    // شروع دور بازی
+    function startGame() {
+      bombHits = 0;
+      wave = 1;
+      items = [];
+      particles = [];
+      waveTimer = 0;
+      isPlaying = true;
+      updateUI();
+      document.getElementById('start-menu').classList.add('hidden');
+      document.getElementById('gameover-menu').classList.add('hidden');
+      spawnWave();
+    }
+
+    // شبیه‌ساز تبلیغ
+    function watchAd() {
+      document.getElementById('gameover-menu').classList.add('hidden');
+      const adScreen = document.getElementById('ad-screen');
+      const adTimer = document.getElementById('ad-timer');
+      adScreen.classList.remove('hidden');
+
+      let left = 5;
+      adTimer.innerText = left;
+      const interval = setInterval(() => {
+        left--;
+        adTimer.innerText = left;
+        if (left <= 0) {
+          clearInterval(interval);
+          adScreen.classList.add('hidden');
+          // پاداش ۱۰ الماس و ادامه بازی
+          diamonds += 10;
+          bombHits = 0; // فرصت دوباره
+          localStorage.setItem('saved_diamonds', diamonds);
+          isPlaying = true;
+          updateUI();
+          spawnWave();
+        }
+      }, 1000);
+    }
+
+    // دکمه‌ها
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+    document.getElementById('watch-ad-btn').addEventListener('click', watchAd);
+
+    // حلقه اصلی فریم‌ها (Game Loop)
+    let lastTime = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (isPlaying) {
+        waveTimer += dt;
+        if (waveTimer >= WAVE_INTERVAL) {
+          waveTimer = 0;
+          wave++;
+          updateUI();
+          spawnWave();
+        }
+
+        // آپدیت و رسم آیتم‌ها
+        for (let i = items.length - 1; i >= 0; i--) {
+          items[i].update(dt);
+          items[i].draw(ctx);
+          if (items[i].isDead) items.splice(i, 1);
+        }
+
+        // ذرات
+        for (let i = particles.length - 1; i >= 0; i--) {
+          particles[i].update(dt);
+          particles[i].draw(ctx);
+          if (particles[i].life <= 0) particles.splice(i, 1);
+        }
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    updateUI();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
